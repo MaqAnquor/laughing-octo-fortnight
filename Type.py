@@ -1,6 +1,24 @@
 import csv
-from datetime import datetime
 from pathlib import Path
+from datetime import datetime
+
+def select_csv_file():
+    cwd = Path.cwd()
+    csv_files = list(cwd.glob("*.csv"))
+    if not csv_files:
+        print("❌ No CSV files found in current directory.")
+        return None
+
+    print("📄 Available CSV files:")
+    for idx, file in enumerate(csv_files, start=1):
+        print(f"{idx}. {file.name}")
+    
+    try:
+        choice = int(input("Enter the number of the file to check: ")) - 1
+        return csv_files[choice]
+    except (ValueError, IndexError):
+        print("❌ Invalid selection.")
+        return None
 
 def infer_type(value):
     value = value.strip()
@@ -26,28 +44,33 @@ def infer_type(value):
 def check_column_types_and_log_errors(csv_file_path):
     csv_file = Path(csv_file_path)
     if not csv_file.exists():
-        print("File does not exist.")
+        print("❌ File does not exist.")
         return
 
     with open(csv_file, 'r', encoding='utf-8-sig', errors='replace') as f:
         reader = list(csv.reader(f))
         if not reader:
-            print("Empty file.")
+            print("❌ Empty file.")
             return
 
         header = reader[0]
         rows = reader[1:]
 
-        # Infer expected types from first non-empty row values
+        # Infer expected types per column
         expected_types = []
         for col_index in range(len(header)):
-            col_vals = [row[col_index] for row in rows if row[col_index].strip() != ""]
+            col_vals = [row[col_index] for row in rows if len(row) > col_index and row[col_index].strip() != ""]
             col_type = infer_type(col_vals[0]) if col_vals else "str"
             expected_types.append(col_type)
 
+        # Check each value and collect mismatches
         log_entries = []
-        for line_number, row in enumerate(rows, start=2):  # Starting from line 2 (after header)
-            for col_index, value in enumerate(row):
+        for line_number, row in enumerate(rows, start=2):
+            for col_index in range(len(header)):
+                try:
+                    value = row[col_index]
+                except IndexError:
+                    value = ""
                 inferred_type = infer_type(value)
                 expected = expected_types[col_index]
                 if inferred_type != "empty" and inferred_type != expected:
@@ -59,12 +82,20 @@ def check_column_types_and_log_errors(csv_file_path):
     # Write log to file
     log_file = csv_file.with_suffix('.log')
     with open(log_file, 'w', encoding='utf-8') as logf:
-        logf.write(f"Data Type Mismatch Report for {csv_file.name}\n")
+        logf.write(f"📋 Data Type Mismatch Report for {csv_file.name}\n")
         logf.write(f"{'-'*60}\n")
         if log_entries:
             for entry in log_entries:
                 logf.write(entry + "\n")
-            print(f"⚠️ Mismatches logged to: {log_file.name}")
+            print(f"\n⚠️ Mismatches found and logged to: {log_file.name}")
         else:
             logf.write("✅ No data type mismatches detected.\n")
-            print("✅ No data type mismatches detected.")
+            print("\n✅ No data type mismatches detected.")
+
+def main():
+    file = select_csv_file()
+    if file:
+        check_column_types_and_log_errors(file)
+
+if __name__ == "__main__":
+    main()
